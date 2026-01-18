@@ -13,9 +13,16 @@ const sendEmail = async (to, subject, html) => {
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
-      }
+      },
+      pool: true,
+      maxConnections: 1,
+      maxMessages: 5,
+      rateDelta: 2000,
+      rateLimit: 5,
+      socketTimeout: 5000,
+      connectionTimeout: 5000
     });
-    
+
     console.log(`[sendEmail] Transporter created`);
 
     const mailOptions = {
@@ -25,7 +32,13 @@ const sendEmail = async (to, subject, html) => {
       html
     };
 
-    const info = await transporter.sendMail(mailOptions);
+    // Add timeout promise wrapper
+    const sendMailPromise = transporter.sendMail(mailOptions);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Email sending timeout after 20 seconds')), 20000)
+    );
+
+    const info = await Promise.race([sendMailPromise, timeoutPromise]);
     console.log(`[sendEmail] Email sent successfully to ${to}. Message ID: ${info.messageId}`);
     
     return info;

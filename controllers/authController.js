@@ -82,11 +82,32 @@ export const forgotPassword = async (req, res) => {
       <p>This OTP is valid for 10 minutes.</p>
     `;
     
-    await sendEmail(email, 'Password Reset OTP', html);
-    
-    console.log(`[forgotPassword] Email sent successfully to ${email}`);
-    
-    res.json({ message: 'OTP sent to your email' });
+    // Send email with timeout handling
+    try {
+      await Promise.race([
+        sendEmail(email, 'Password Reset OTP', html),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Email service timeout')), 25000)
+        )
+      ]);
+      
+      console.log(`[forgotPassword] Email sent successfully to ${email}`);
+      
+      // Respond immediately - email is sent
+      res.json({ 
+        message: 'OTP sent to your email',
+        otpSent: true
+      });
+    } catch (emailError) {
+      console.error('[forgotPassword] Email sending error:', emailError.message);
+      
+      // Email failed but OTP is saved - inform user to check spam or retry
+      res.status(202).json({ 
+        message: 'OTP generated. Please check your email inbox or spam folder. If not received, please try again.',
+        otpGenerated: true,
+        warning: 'Email service delayed'
+      });
+    }
   } catch (error) {
     console.error('[forgotPassword] Error:', error.message);
     res.status(500).json({ message: error.message });
