@@ -57,24 +57,31 @@ export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
     
-    console.log(`[forgotPassword] Email received: ${email}`);
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`[forgotPassword] NEW REQUEST - Email: ${email}`);
+    console.log(`${'='.repeat(60)}`);
     
     if (!email) {
+      console.warn('[forgotPassword] ✗ Email is required');
       return res.status(400).json({ message: 'Email is required' });
     }
     
+    console.log(`[forgotPassword] ✓ Email validation passed`);
+    
     const user = await User.findOne({ email });
     if (!user) {
-      console.log(`[forgotPassword] User not found: ${email}`);
+      console.warn(`[forgotPassword] ✗ User not found: ${email}`);
       return res.status(404).json({ message: 'User not found' });
     }
     
+    console.log(`[forgotPassword] ✓ User found: ${user.name}`);
+    
     const otp = generateOTP();
     user.otp = otp;
-    user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
     await user.save({ validateBeforeSave: false });
     
-    console.log(`[forgotPassword] OTP generated and saved for ${email}: ${otp}`);
+    console.log(`[forgotPassword] ✓ OTP saved to database: ${otp}`);
     
     const html = `
       <h1>Password Reset OTP</h1>
@@ -82,35 +89,45 @@ export const forgotPassword = async (req, res) => {
       <p>This OTP is valid for 10 minutes.</p>
     `;
     
-    // Send email with timeout handling
+    console.log(`[forgotPassword] ℹ Email content prepared, about to send...`);
+    
     try {
-      await Promise.race([
-        sendEmail(email, 'Password Reset OTP', html),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Email service timeout')), 25000)
-        )
-      ]);
+      const emailResult = await sendEmail(email, 'Password Reset OTP', html);
       
-      console.log(`[forgotPassword] Email sent successfully to ${email}`);
+      console.log(`[forgotPassword] ✓ Email sent successfully via sendEmail`);
+      console.log(`[forgotPassword] Email Result:`, emailResult);
       
-      // Respond immediately - email is sent
       res.json({ 
         message: 'OTP sent to your email',
-        otpSent: true
+        otpSent: true,
+        debug: {
+          userFound: true,
+          otpGenerated: true,
+          emailSent: true,
+          messageId: emailResult?.messageId
+        }
       });
     } catch (emailError) {
-      console.error('[forgotPassword] Email sending error:', emailError.message);
+      console.error(`[forgotPassword] ✗ Email sending FAILED:`, emailError.message);
+      console.error(`[forgotPassword] ✗ Full Email Error:`, emailError);
       
-      // Email failed but OTP is saved - inform user to check spam or retry
-      res.status(202).json({ 
-        message: 'OTP generated. Please check your email inbox or spam folder. If not received, please try again.',
+      // Return error to frontend instead of hiding it
+      res.status(500).json({ 
+        message: `Email service error: ${emailError.message}`,
         otpGenerated: true,
-        warning: 'Email service delayed'
+        emailSent: false,
+        error: emailError.message,
+        code: emailError.code
       });
     }
   } catch (error) {
-    console.error('[forgotPassword] Error:', error.message);
-    res.status(500).json({ message: error.message });
+    console.error(`[forgotPassword] ✗ CRITICAL ERROR:`, error.message);
+    console.error(`[forgotPassword] ✗ Full Error:`, error);
+    
+    res.status(500).json({ 
+      message: `Server error: ${error.message}`,
+      error: error.message
+    });
   }
 };
 

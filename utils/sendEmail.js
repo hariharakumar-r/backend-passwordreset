@@ -2,11 +2,15 @@ import nodemailer from 'nodemailer';
 
 const sendEmail = async (to, subject, html) => {
   try {
-    console.log(`[sendEmail] Preparing email for: ${to}`);
+    console.log(`[sendEmail] Starting email send to: ${to}`);
+    console.log(`[sendEmail] Email User: ${process.env.EMAIL_USER}`);
     
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      throw new Error('Email credentials not configured');
+      console.error('[sendEmail] Missing email credentials!');
+      throw new Error('Email credentials not configured in environment variables');
     }
+    
+    console.log(`[sendEmail] Creating transporter...`);
     
     const transporter = nodemailer.createTransport({
       service: 'gmail',
@@ -14,16 +18,15 @@ const sendEmail = async (to, subject, html) => {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
       },
-      pool: true,
-      maxConnections: 1,
-      maxMessages: 5,
-      rateDelta: 2000,
-      rateLimit: 5,
-      socketTimeout: 5000,
-      connectionTimeout: 5000
+      logger: true,
+      debug: true
     });
 
-    console.log(`[sendEmail] Transporter created`);
+    console.log(`[sendEmail] Testing SMTP connection...`);
+    
+    // Verify connection configuration
+    await transporter.verify();
+    console.log(`[sendEmail] SMTP connection verified successfully`);
 
     const mailOptions = {
       from: process.env.EMAIL_USER,
@@ -32,18 +35,25 @@ const sendEmail = async (to, subject, html) => {
       html
     };
 
-    // Add timeout promise wrapper
-    const sendMailPromise = transporter.sendMail(mailOptions);
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Email sending timeout after 20 seconds')), 20000)
-    );
+    console.log(`[sendEmail] Sending mail with options:`, {
+      from: mailOptions.from,
+      to: mailOptions.to,
+      subject: mailOptions.subject
+    });
 
-    const info = await Promise.race([sendMailPromise, timeoutPromise]);
-    console.log(`[sendEmail] Email sent successfully to ${to}. Message ID: ${info.messageId}`);
+    const info = await transporter.sendMail(mailOptions);
+    
+    console.log(`[sendEmail] ✓ Email sent successfully!`);
+    console.log(`[sendEmail] Message ID: ${info.messageId}`);
+    console.log(`[sendEmail] Response: ${info.response}`);
     
     return info;
   } catch (error) {
-    console.error('[sendEmail] Error:', error.message);
+    console.error('[sendEmail] ✗ CRITICAL ERROR:', error);
+    console.error('[sendEmail] Error Code:', error.code);
+    console.error('[sendEmail] Error Message:', error.message);
+    console.error('[sendEmail] Full Error:', JSON.stringify(error, null, 2));
+    
     throw error;
   }
 };
