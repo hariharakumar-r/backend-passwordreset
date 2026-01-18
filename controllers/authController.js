@@ -57,8 +57,15 @@ export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
     
+    console.log(`[forgotPassword] Email received: ${email}`);
+    
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+    
     const user = await User.findOne({ email });
     if (!user) {
+      console.log(`[forgotPassword] User not found: ${email}`);
       return res.status(404).json({ message: 'User not found' });
     }
     
@@ -66,6 +73,8 @@ export const forgotPassword = async (req, res) => {
     user.otp = otp;
     user.otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
     await user.save({ validateBeforeSave: false });
+    
+    console.log(`[forgotPassword] OTP generated and saved for ${email}: ${otp}`);
     
     const html = `
       <h1>Password Reset OTP</h1>
@@ -75,8 +84,11 @@ export const forgotPassword = async (req, res) => {
     
     await sendEmail(email, 'Password Reset OTP', html);
     
+    console.log(`[forgotPassword] Email sent successfully to ${email}`);
+    
     res.json({ message: 'OTP sent to your email' });
   } catch (error) {
+    console.error('[forgotPassword] Error:', error.message);
     res.status(500).json({ message: error.message });
   }
 };
